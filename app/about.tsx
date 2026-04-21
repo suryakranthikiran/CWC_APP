@@ -21,6 +21,32 @@ export default function AboutScreen() {
   const router = useRouter();
   const { theme } = useAppTheme();
   const styles = createStyles(theme);
+  const socialLinks = [
+    {
+      id: "facebook",
+      icon: "logo-facebook",
+      url: "https://facebook.com",
+      backgroundColor: "#1877F2",
+      borderColor: "#1664D9",
+      iconColor: "#FFFFFF",
+    },
+    {
+      id: "instagram",
+      icon: "logo-instagram",
+      url: "https://instagram.com",
+      backgroundColor: "#F77737",
+      borderColor: "#E05D21",
+      iconColor: "#FFFFFF",
+    },
+    {
+      id: "youtube",
+      icon: "logo-youtube",
+      url: "https://www.youtube.com/@JohnWeslyMinistries",
+      backgroundColor: "#FF0000",
+      borderColor: "#D90429",
+      iconColor: "#FFFFFF",
+    },
+  ] as const;
 
   const values = [
     {
@@ -163,26 +189,22 @@ export default function AboutScreen() {
             <Text style={styles.sectionTitle}>Connect With Us</Text>
 
             <View style={styles.socialContainer}>
-              <Pressable
-                style={styles.socialButton}
-                onPress={() => Linking.openURL("https://facebook.com")}
-              >
-                <Ionicons name="logo-facebook" size={22} color="#fff" />
-              </Pressable>
-
-              <Pressable
-                style={styles.socialButton}
-                onPress={() => Linking.openURL("https://instagram.com")}
-              >
-                <Ionicons name="logo-instagram" size={22} color="#fff" />
-              </Pressable>
-
-              <Pressable
-                style={styles.socialButton}
-                onPress={() => Linking.openURL("https://www.youtube.com/@JohnWeslyMinistries")}
-              >
-                <Ionicons name="logo-youtube" size={22} color="#fff" />
-              </Pressable>
+              {socialLinks.map((item) => (
+                <Pressable
+                  key={item.id}
+                  style={({ pressed }) => [
+                    styles.socialButton,
+                    {
+                      backgroundColor: item.backgroundColor,
+                      borderColor: item.borderColor,
+                    },
+                    pressed && styles.socialButtonPressed,
+                  ]}
+                  onPress={() => Linking.openURL(item.url)}
+                >
+                  <Ionicons name={item.icon} size={22} color={item.iconColor} />
+                </Pressable>
+              ))}
 
 {/* 
               <Pressable
@@ -337,13 +359,26 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   socialContainer: {
     flexDirection: "row",
     justifyContent: "space-around",
+    gap: 14,
   },
 
   socialButton: {
-    backgroundColor: "rgba(167,139,250,0.1)",
+    width: 58,
+    height: 58,
     padding: 16,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: "rgba(167,139,250,0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+  },
+
+  socialButtonPressed: {
+    opacity: 0.88,
+    transform: [{ scale: 0.96 }],
   },
 });

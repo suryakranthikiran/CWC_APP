@@ -1,10 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { type Href, useRouter } from "expo-router";
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Animated,
-  Dimensions,
+  Linking,
   Pressable,
   ScrollView,
   StatusBar,
@@ -13,11 +14,104 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import YoutubeIframe from "react-native-youtube-iframe";
 
 import type { AppTheme } from "../src/theme/colors";
 import { useAppTheme } from "../src/theme/ThemeProvider";
 
-const { width } = Dimensions.get("window");
+const DAILY_PROMISE_CHANNEL_ID = "UCMgbYmq6I5zcQUiCN-k_pFA";
+const DAILY_PROMISE_TITLE_KEYWORD = "daily bible promise";
+const DAILY_PROMISE_PENDING_MESSAGE =
+  "Today&apos;s promise will appear after 4 AM upload.";
+
+type DailyPromiseVideo = {
+  videoId: string;
+  title: string;
+  publishedAt: string;
+  url: string;
+};
+
+const formatPromiseDate = (value: string) => {
+  const parsedDate = new Date(value);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return "";
+  }
+
+  return parsedDate.toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+};
+
+const decodeXmlEntities = (value: string) =>
+  value
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .trim();
+
+const isSameLocalDate = (value: string, compareTo: Date) => {
+  const parsedDate = new Date(value);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return false;
+  }
+
+  return parsedDate.toDateString() === compareTo.toDateString();
+};
+
+async function fetchLatestDailyPromise(): Promise<DailyPromiseVideo> {
+  const response = await fetch(
+    `https://www.youtube.com/feeds/videos.xml?channel_id=${DAILY_PROMISE_CHANNEL_ID}`
+  );
+
+  if (!response.ok) {
+    throw new Error("Unable to load the latest promise video.");
+  }
+
+  const xml = await response.text();
+  const today = new Date();
+  const matchingEntry = [...xml.matchAll(/<entry>([\s\S]*?)<\/entry>/g)].find(
+    (entry) => {
+      const rawTitle = entry[1].match(/<title>(.*?)<\/title>/)?.[1];
+      const publishedAt = entry[1].match(/<published>(.*?)<\/published>/)?.[1];
+
+      if (!rawTitle || !publishedAt) {
+        return false;
+      }
+
+      return (
+        decodeXmlEntities(rawTitle)
+          .toLowerCase()
+          .includes(DAILY_PROMISE_TITLE_KEYWORD) &&
+        isSameLocalDate(publishedAt, today)
+      );
+    }
+  );
+
+  if (!matchingEntry) {
+    throw new Error(DAILY_PROMISE_PENDING_MESSAGE);
+  }
+
+  const videoId = matchingEntry[1].match(/<yt:videoId>(.*?)<\/yt:videoId>/)?.[1];
+  const title = matchingEntry[1].match(/<title>(.*?)<\/title>/)?.[1];
+  const publishedAt = matchingEntry[1].match(/<published>(.*?)<\/published>/)?.[1];
+
+  if (!videoId || !title) {
+    throw new Error("The Daily Bible Promise video could not be parsed.");
+  }
+
+  return {
+    videoId,
+    title: decodeXmlEntities(title),
+    publishedAt: publishedAt ?? "",
+    url: `https://www.youtube.com/watch?v=${videoId}`,
+  };
+}
 
 /* ─── Staggered Fade-In ─── */
 function FadeIn({
@@ -48,7 +142,7 @@ function FadeIn({
         friction: 10,
       }),
     ]).start();
-  }, []);
+  }, [delay, opacity, translateY]);
 
   return (
     <Animated.View style={[{ opacity, transform: [{ translateY }] }, style]}>
@@ -99,6 +193,43 @@ export default function Home() {
   const router = useRouter();
   const { theme } = useAppTheme();
   const s = createStyles(theme);
+  const [dailyPromise, setDailyPromise] = useState<DailyPromiseVideo | null>(null);
+  const [isPromiseLoading, setIsPromiseLoading] = useState(true);
+  const [promiseError, setPromiseError] = useState<string | null>(null);
+  const todayLabel = formatPromiseDate(new Date().toISOString());
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadDailyPromise = async () => {
+      try {
+        const latestVideo = await fetchLatestDailyPromise();
+
+        if (isMounted) {
+          setDailyPromise(latestVideo);
+          setPromiseError(null);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setPromiseError(
+            error instanceof Error
+              ? error.message
+              : "Unable to load the daily promise right now."
+          );
+        }
+      } finally {
+        if (isMounted) {
+          setIsPromiseLoading(false);
+        }
+      }
+    };
+
+    loadDailyPromise();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const primaryFeatures = [
     {
@@ -215,7 +346,7 @@ export default function Home() {
           </FadeIn>
 
           {/* ─── Hero Section ─── */}
-          <FadeIn delay={100}>
+          <FadeIn delay={180}>
             <View style={s.heroSection}>
               <View style={s.crossWrap}>
                 <Text style={s.crossIcon}>✝</Text>
@@ -291,6 +422,69 @@ export default function Home() {
               </FadeIn>
             ))}
           </View>
+
+          <FadeIn delay={760}>
+            <View style={s.dailyPromiseCard}>
+              <View style={s.dailyPromiseTopRow}>
+                <View style={s.dailyPromiseHeadingWrap}>
+                  <Text style={s.dailyPromiseEyebrow}>Daily Promise From God</Text>
+                  <Text style={s.dailyPromiseHeading}>{todayLabel}</Text>
+                </View>
+
+                <View style={s.dailyPromiseDatePill}>
+                  <Ionicons name="calendar-outline" size={14} color="#ef4444" />
+                  <Text style={s.dailyPromiseDatePillText}>Daily</Text>
+                </View>
+              </View>
+
+              <Text style={s.dailyPromiseDescription}>
+                Today&apos;s Daily Bible Promise video from Pastor John Wesly.
+              </Text>
+
+              {isPromiseLoading ? (
+                <View style={s.dailyPromiseState}>
+                  <ActivityIndicator color="#ef4444" />
+                  <Text style={s.dailyPromiseStateText}>Loading today&apos;s promise...</Text>
+                </View>
+              ) : promiseError ? (
+                <View style={s.dailyPromiseState}>
+                  <Ionicons name="time-outline" size={22} color="#ef4444" />
+                  <Text style={s.dailyPromiseStateText}>{promiseError}</Text>
+                </View>
+              ) : dailyPromise ? (
+                <>
+                  <View style={s.dailyPromiseVideoWrap}>
+                    <YoutubeIframe height={198} play={false} videoId={dailyPromise.videoId} />
+                  </View>
+
+                  <Text style={s.dailyPromiseTitle}>{dailyPromise.title}</Text>
+
+                  <View style={s.dailyPromiseMetaRow}>
+                    <View style={s.dailyPromiseMetaChip}>
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={14}
+                        color="#16a34a"
+                      />
+                      <Text style={s.dailyPromiseMetaText}>
+                        Uploaded today
+                      </Text>
+                    </View>
+                  </View>
+
+                  <Pressable
+                    onPress={() => Linking.openURL(dailyPromise.url)}
+                    style={({ pressed }) => [
+                      s.dailyPromiseButton,
+                      pressed && { opacity: 0.85 },
+                    ]}
+                  >
+                    <Text style={s.dailyPromiseButtonText}>Watch on YouTube</Text>
+                  </Pressable>
+                </>
+              ) : null}
+            </View>
+          </FadeIn>
 
           {/* ─── Footer ─── */}
           <FadeIn delay={900}>
@@ -379,6 +573,123 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     color: theme.textMuted,
     marginTop: 8,
     fontWeight: "600",
+  },
+
+  dailyPromiseCard: {
+    marginHorizontal: 16,
+    marginBottom: 24,
+    marginTop: 24,
+    padding: 16,
+    borderRadius: 20,
+    backgroundColor: theme.surface,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  dailyPromiseTopRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 8,
+  },
+  dailyPromiseHeadingWrap: {
+    flex: 1,
+  },
+  dailyPromiseEyebrow: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#ef4444",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+    marginBottom: 4,
+  },
+  dailyPromiseHeading: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: theme.text,
+    lineHeight: 24,
+  },
+  dailyPromiseDatePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(239, 68, 68, 0.1)",
+  },
+  dailyPromiseDatePillText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#ef4444",
+  },
+  dailyPromiseDescription: {
+    fontSize: 13,
+    color: theme.textMuted,
+    lineHeight: 20,
+    marginBottom: 14,
+  },
+  dailyPromiseVideoWrap: {
+    overflow: "hidden",
+    borderRadius: 16,
+    backgroundColor: theme.surfaceMuted,
+    marginBottom: 14,
+  },
+  dailyPromiseTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: theme.text,
+    lineHeight: 22,
+    marginBottom: 8,
+  },
+  dailyPromiseMetaRow: {
+    gap: 8,
+    marginBottom: 14,
+  },
+  dailyPromiseMetaChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: theme.surfaceMuted,
+  },
+  dailyPromiseMetaText: {
+    fontSize: 12,
+    color: theme.textMuted,
+  },
+  dailyPromiseMetaNote: {
+    fontSize: 12,
+    color: theme.textMuted,
+  },
+  dailyPromiseState: {
+    minHeight: 148,
+    borderRadius: 16,
+    backgroundColor: theme.surfaceMuted,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+    gap: 10,
+  },
+  dailyPromiseStateText: {
+    fontSize: 13,
+    color: theme.textMuted,
+    textAlign: "center",
+    lineHeight: 20,
+  },
+  dailyPromiseButton: {
+    alignSelf: "flex-start",
+    backgroundColor: "#ef4444",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  dailyPromiseButtonText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "700",
   },
 
   /* Primary Cards */
