@@ -143,7 +143,7 @@ function ServiceBanner() {
       desc: "Join the congregation for powerful worship and sermon",
       icon: "people",
       color: "#a78bfa",
-      image: "https://images.unsplash.com/photo-1519491050282-cf6ff2f10a28?w=400&h=200&fit=crop",
+      image: "https://images.unsplash.com/photo-1636228492530-87c1f10f4b9e?q=80&w=3432&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
     },
     {
       type: "activity",
